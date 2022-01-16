@@ -7,7 +7,7 @@ import java.security.PublicKey;
 
 abstract public class Transaction {
     public TransactionKind kind = TransactionKind.DUMMY;
-    public long transactionId;
+    //    public long transactionId;
     //    String id;
     private long timeStamp;
     private byte[] signature;
@@ -18,6 +18,10 @@ abstract public class Transaction {
         this.kind = kind;
         this.publicKey = keys.getPublicKey();
         signTransaction(keys);
+    }
+
+    public long getTimeStamp() {
+        return timeStamp;
     }
 
     public void touch() {
@@ -34,21 +38,25 @@ abstract public class Transaction {
 
     abstract protected String getFields();
 
+    public long getId() {
+        return timeStamp;
+    }
     public String getData() {
         return String.format("[%d]:%s: %s",
-                transactionId, kind.name(), getFields());
+                getId(), kind.name(), getFields());
     }
 
     @Override
     public String toString() {
+        super.toString();
         return String.format("[%d]:%s: %s {%s}",
-                transactionId, kind.name(), getFields(), CryptoHelper.exncodeHex(signature));
+                timeStamp, kind.name(), getFields(), CryptoHelper.exncodeHex(signature));
 
     }
 
     public enum TransactionKind {
         DUMMY,
         MESSAGE,
-        CURRENCY_TRANSFER
+        TRANSFER
     }
 }

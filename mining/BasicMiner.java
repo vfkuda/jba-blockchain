@@ -22,7 +22,6 @@ public class BasicMiner implements Runnable {
         block.setTransactionPack(transactions);
         Random rand = new Random(new Date().getTime());
         block.setMagic(rand.nextInt(Integer.MAX_VALUE) / 2);
-
     }
 
     @Override

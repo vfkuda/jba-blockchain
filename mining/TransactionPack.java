@@ -5,11 +5,13 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class TransactionPack {
-    public long timeStamp;
+    //    public long timeStamp;
     List<Transaction> transactions = new ArrayList<>();
 
     public TransactionPack() {
-        this.timeStamp = System.currentTimeMillis();
+
+//        this.timeStamp = System.currentTimeMillis();
+
     }
 
     @Override
@@ -18,12 +20,12 @@ public class TransactionPack {
         return String.join("\n", strings);
     }
 
-    public long getLastTransactionId() {
-        if (transactions.size() == 0) {
-            return 0;
-        }
-        return transactions.get(transactions.size() - 1).transactionId;
-    }
+//    public long getLastTransactionId() {
+//        if (transactions.size() == 0) {
+//            return 0;
+//        }
+//        return transactions.get(transactions.size() - 1).transactionId;
+//    }
 
     public List<Transaction> getTransactions() {
         return transactions;
@@ -33,10 +35,25 @@ public class TransactionPack {
         transactions.add(transaction);
     }
 
-    public long getFirstTransactionId() {
-        if (transactions.size() == 0) {
+    public void addTransasctions(TransactionPack transactionPack) {
+        transactions.addAll(transactionPack.getTransactions());
+    }
+
+    //    public long getFirstTransactionId() {
+//        if (transactions.size() == 0) {
+//            return 0;
+//        }
+//        return transactions.get(0).transactionId;
+//    }
+    public long getFirstTransactionTimeStampInThePack() {
+        if (isEmpty()) {
             return 0;
         }
-        return transactions.get(0).transactionId;
+        return transactions.get(0).getTimeStamp();
+
+    }
+
+    public boolean isEmpty() {
+        return transactions.isEmpty();
     }
 }

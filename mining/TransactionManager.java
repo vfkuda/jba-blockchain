@@ -11,10 +11,9 @@ public class TransactionManager extends MediaClient {
     //        in milliseconds
     private static final long MINING_TIME_THRESHOLD_MIN = 1_000;
     private static final long MINING_TIME_THRESHOLD_MAX = 3_000;
-
+    private TransactionManagetMonitor monitor = new TransactionManagerMonitorImpl();
     private NetworkCompexity complexity;
     private BlockChain blockChain;
-//    private Queue<Transaction> transactions;
 
     public TransactionManager() {
         super();
@@ -22,9 +21,14 @@ public class TransactionManager extends MediaClient {
         complexity = new NetworkCompexity(0);
 //        transactions = new LinkedList<>();
     }
+//    private Queue<Transaction> transactions;
 
     public BlockChain getBlockChain() {
         return blockChain;
+    }
+
+    public void setMonitor(TransactionManagetMonitor monitor) {
+        this.monitor = monitor;
     }
 
     @Override
@@ -51,20 +55,25 @@ public class TransactionManager extends MediaClient {
                             setBlock(pack.block).
                             setStatus(true));
 
-                    long completionTime = System.currentTimeMillis() - prevBlock
+//                    long completionTime = System.currentTimeMillis() - prevBlock
+//                            .getTimeStamp();
+                    long completionTime = pack.block.getTimeStamp() - prevBlock
                             .getTimeStamp();
                     int adjustmentFactor = complexity.doesReqireAdjustment(completionTime);
                     complexity.adjust(adjustmentFactor);
 
-                    log(pack.sender, pack.block, completionTime, adjustmentFactor);
+//                    log(pack.sender, pack.block, completionTime, adjustmentFactor);
+                    if (monitor != null) {
+                        monitor.log(pack.sender, pack.block, completionTime, adjustmentFactor, complexity.complexity);
+                    }
 
                     broadcast(new DataPack(DataPack.DataPackKind.MINING_NETWORK_UPDATE).
                             setBlock(blockChain.getLastBlock()).
                             setIntParam(complexity.complexity)
                     );
-                    broadcast(new DataPack(DataPack.DataPackKind.MINING_REQUEST_STATUS).
-                            setTransactions(pack.block.getTransactionPack()).
-                            setStatus(true));
+//                    broadcast(new DataPack(DataPack.DataPackKind.MINING_REQUEST_STATUS).
+//                            setTransactions(pack.block.getTransactionPack()).
+//                            setStatus(true));
 
                 } else {
                     int err = blockChain.checkBlockValidity(pack.block);
@@ -83,50 +92,59 @@ public class TransactionManager extends MediaClient {
 
     }
 
+
 //    public boolean hasActiveTransactions() {
 //        return !transactions.isEmpty();
 //    }
 
-    private void log(MediaAddress addr, Block block, long completionTimeInMilliSeconds, int complexityAdjustment) {
-        StringBuilder sb = new StringBuilder();
-        String ln = System.getProperty("line.separator");
-        sb.append("Block:");
-        sb.append(ln);
-        sb.append(String.format("Created by miner # %s:", addr.toString()));
-        sb.append(ln);
-        sb.append(String.format("Id: %d", block.getBlockId()));
-        sb.append(ln);
-        sb.append(String.format("Timestamp: %d", block.getTimeStamp()));
-        sb.append(ln);
-        sb.append(String.format("Magic number: %d", block.getMagic()));
-        sb.append(ln);
-        sb.append("Hash of the previous block:");
-        sb.append(ln);
-        sb.append(block.getPrevHash());
-        sb.append(ln);
-        sb.append("Hash of the block:");
-        sb.append(ln);
-        sb.append(block.getBlockHash());
-        sb.append(ln);
-        sb.append("Block data:");
-        sb.append(ln);
-        sb.append(block.getTransactionPack().toString());
-        sb.append(ln);
-        sb.append(String.format("Block was generating for %d seconds", Math.round(completionTimeInMilliSeconds / 1000.0)));
-        sb.append(ln);
-        switch (complexityAdjustment) {
-            case -1:
-                sb.append("N was decreased by 1");
-                break;
-            case 1:
-                sb.append(String.format("N was increased to %d", complexity.complexity));
-                break;
-            default:
-                sb.append("N stays the same");
-        }
-        sb.append(ln);
+    interface TransactionManagetMonitor {
+        public void log(MediaAddress minderAddress, Block block, long completionTimeInMilliSeconds, int complexityAdjustment, int complexity);
+    }
 
-        System.out.println(sb.toString());
+    public static class TransactionManagerMonitorImpl implements TransactionManagetMonitor {
+        public void log(MediaAddress minderAddress, Block block, long completionTimeInMilliSeconds, int complexityAdjustment, int complexity) {
+            StringBuilder sb = new StringBuilder();
+            String ln = System.getProperty("line.separator");
+            sb.append("Block:");
+            sb.append(ln);
+            sb.append(String.format("Created by miner # %s:", minderAddress.toString()));
+            sb.append(ln);
+            sb.append(String.format("%s gets 100 VC ", minderAddress.toString()));
+            sb.append(ln);
+            sb.append(String.format("Id: %d", block.getBlockId()));
+            sb.append(ln);
+            sb.append(String.format("Timestamp: %d", block.getTimeStamp()));
+            sb.append(ln);
+            sb.append(String.format("Magic number: %d", block.getMagic()));
+            sb.append(ln);
+            sb.append("Hash of the previous block:");
+            sb.append(ln);
+            sb.append(block.getPrevHash());
+            sb.append(ln);
+            sb.append("Hash of the block:");
+            sb.append(ln);
+            sb.append(block.getBlockHash());
+            sb.append(ln);
+            sb.append("Block data:");
+            sb.append(ln);
+            sb.append(block.getTransactionPack().toString());
+            sb.append(ln);
+            sb.append(String.format("Block was generating for %d seconds", Math.round(completionTimeInMilliSeconds / 1000.0)));
+            sb.append(ln);
+            switch (complexityAdjustment) {
+                case -1:
+                    sb.append("N was decreased by 1");
+                    break;
+                case 1:
+                    sb.append(String.format("N was increased to %d", complexity));
+                    break;
+                default:
+                    sb.append("N stays the same");
+            }
+            sb.append(ln);
+
+            System.out.println(sb.toString());
+        }
     }
 
     class NetworkCompexity {
@@ -150,6 +168,5 @@ public class TransactionManager extends MediaClient {
             return 0;
         }
     }
-
 
 }

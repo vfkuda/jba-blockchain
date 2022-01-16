@@ -4,11 +4,13 @@ import blockchain.mining.Transaction;
 import blockchain.mining.TransactionPack;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 
 public class BlockChain {
     private final List<Block> blocks;
+    HashSet<Transaction> transactionIndex = new HashSet<>();
 
     public BlockChain() {
         this.blocks = new ArrayList<>();
@@ -16,42 +18,54 @@ public class BlockChain {
     }
 
     public int checkBlockValidity(Block block) {
+//        block timestamp can't be older than timestamp of the last block in the chain
         if ((block.getTimeStamp() < getLastBlock().getTimeStamp()) ||
                 (block.getTimeStamp() > System.currentTimeMillis())) {
             return 1;
         }
-
+//  block hash should match
         if (!Objects.equals(block.getPrevHash(), getLastBlock().getBlockHash())) {
             return 2;
         }
-
+//  there should be no block with same Id
         if (findById(block.getBlockId())) {
             return 3;
         }
 
-        long lastTransactionId = getLastTransactionPack().getLastTransactionId();
+//        long lastTransactionId = getLastTransactionPack().getLastTransactionId();
         for (Transaction tr : block.transactionPack.getTransactions()) {
-            if (tr.transactionId <= lastTransactionId) {
-                return 4;
+//            if (tr.getTimeStamp() <= getLastBlock().getTimeStamp()) {
+//                return 4;
+//            }
+            if (transactionIndex.contains(tr)) {
+                return 5;
             }
             try {
                 if (!tr.verify()) {
-                    return 5;
+                    return 6;
                 }
             } catch (Exception e) {
                 e.printStackTrace();
-                return 5;
+                return 6;
             }
         }
         return 0;
     }
 
+    public void addBlock(Block block) {
+        //add Block
+        blocks.add(block);
+        // index transactions
+        for (Transaction tr : block.getTransactionPack().getTransactions()) {
+            transactionIndex.add(tr);
+        }
+    }
+
     public boolean registerBlock(Block block) {
         if (0 == checkBlockValidity(block)) {
-            blocks.add(block);
+            addBlock(block);
             return true;
         }
-
         return false;
     }
 

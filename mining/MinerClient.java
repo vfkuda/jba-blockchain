@@ -2,44 +2,90 @@ package blockchain.mining;
 
 import blockchain.Logger;
 import blockchain.blockchain.Block;
+import blockchain.media.BasicChainClient;
 import blockchain.media.DataPack;
-import blockchain.media.MediaClient;
+import blockchain.media.MediaAddress;
 
-import java.util.LinkedList;
-import java.util.Queue;
-import java.util.Random;
+import java.util.*;
 
-public class MinerClient extends MediaClient {
+public class MinerClient extends BasicChainClient implements BlockFound {
+    final static int MIN_TRANSACTIONS_IN_BLOCK = 4;
     final Random rand = new Random();
-    Queue<TransactionPack> transactions = new LinkedList<>();
-    Queue<Block> sentBlocks = new LinkedList<>();
-    SimpleMiner miner;
+    final List<Transaction> unconfirmedTransactions = new LinkedList<>();
+    final List<Transaction> sentTransactions = new LinkedList<>();
+    final Queue<BasicMinerClient.MiningTask> tasks = new LinkedList<>();
+    BasicMiner miner;
+    //cachced addr
+    MediaAddress blockChainClient;
+    volatile int lastKnownNetworkComplexity;
+    volatile Block lastKnownBlock;
+    private Block sentBlock;
+//    private boolean flushFlag = false;
 
     public MinerClient() {
         super();
-        miner = new SimpleMiner(this);
-        new Thread(miner).start();
+        sendToBlockChainClient(new DataPack(DataPack.DataPackKind.MINING_NETWORK_UPDATE_REQUEST));
+
     }
 
-    public void onBlockFound(Block block) {
-        sentBlocks.offer(block);
-        broadcast(new DataPack(DataPack.DataPackKind.BLOCK_SUGGESTION).setBlock(block));
+    protected TransactionPack createTransactionPackToMine() {
+        List<Transaction> transactions = new ArrayList<>(unconfirmedTransactions);
+        transactions.removeAll(sentTransactions);
+        Collections.shuffle(transactions);
+        TransactionPack tp = new TransactionPack();
+        int n = Math.min(transactions.size(), MIN_TRANSACTIONS_IN_BLOCK);
+        for (int i = 0; i < n; i++) {
+            tp.addTransasction(transactions.get(i));
+        }
+        return tp;
     }
 
-    protected void updateOnMiningNetwork() {
-        broadcast(new DataPack(DataPack.DataPackKind.MINING_NETWORK_UPDATE_REQUEST));
+    protected void terminateMining() {
+        if (miner != null) {
+            miner.terminate();
+            miner = null;
+        }
+    }
+
+    protected void resetMining() {
+        if (sentBlock == null) {
+            terminateMining();
+            TransactionPack tp = createTransactionPackToMine();
+            if (!tp.isEmpty() && lastKnownBlock != null) {
+                miner = new BasicMiner(this, lastKnownBlock, lastKnownNetworkComplexity, tp);
+                new Thread(miner).start();
+            }
+        }
+
+    }
+
+    public void sendToBlockChainClient(DataPack pack) {
+        if (blockChainClient != null) {
+            send(blockChainClient, pack);
+        } else {
+            broadcast(pack);
+        }
+    }
+
+
+    @Override
+    public synchronized void onBlockFound(BasicMiner miner, Block block) {
+        if (this.miner == miner) {
+//            System.out.println(address.toString() + " onfound: blockid " + block.getBlockId());
+            sentBlock = block;
+            sendToBlockChainClient(new DataPack(DataPack.DataPackKind.BLOCK_SUGGESTION).setBlock(block));
+        }
     }
 
     @Override
     protected void onShutdown() {
-        miner.terminate();
-//        super.onShutdown();
+        terminateMining();
     }
 
     @Override
     protected void onIdle() {
-        if (!miner.isBusy() && !transactions.isEmpty()) {
-            miner.queueResetMiningOnTransactionPackChanged(transactions.peek());
+        if (miner == null) {
+            resetMining();
         }
     }
 
@@ -48,61 +94,35 @@ public class MinerClient extends MediaClient {
         Logger.info("package received by miner %s", this);
 
         switch (pack.kind) {
-            case MINING_REQUEST_AUCTION:
-                send(pack.sender, new DataPack(DataPack.DataPackKind.MINING_REQUEST_AUCTION_BID).
-                        setTransactions(pack.transactions).
-                        setIntParam(rand.nextInt((int) 1000000.0 / (transactions.size() + 1))));
-                break;
             case MINING_REQUEST:
-                transactions.add(pack.transactions);
-                break;
-
-            case MINING_REQUEST_STATUS:
-//                if (pack.status) {
-//                    transactions.remove(pack.transactions);
-//                }
-
-//                if (miner.transactions == pack.transactions) {
-////                    miner.state = MinerStatus.IDLE;
-////                    miner.stopMining();
-//                }
+                unconfirmedTransactions.addAll(pack.transactions.getTransactions());
                 break;
 
             case BLOCK_DECISION:
-                if (sentBlocks.contains(pack.block)) {
-                    sentBlocks.remove(pack.block);
-                    if (pack.status) {
-                        transactions.remove(pack.block.getTransactionPack());
-//                        miner.transitToIdle()
-                        miner.state = MinerStatus.IDLE;
-                    } else {
-                        if (pack.block != miner.block) {
-                            miner.state = MinerStatus.MINING;
-                        } else {
-                            miner.state = MinerStatus.ON_TASK_WAITING_FOR_PARAMS;
-                        }
-                    }
+                if (pack.status) {
+                    unconfirmedTransactions.removeAll(pack.block.getTransactionPack().getTransactions());
+                    sentTransactions.removeAll(pack.block.getTransactionPack().getTransactions());
+                    resetMining();
+                } else {
+                    sentTransactions.removeAll(pack.block.getTransactionPack().getTransactions());
                 }
-//                else {
-////                    some other block change means block will change shortly
-//                    miner.state = MinerStatus.WAITING_TASK_PARAMS;
-//                }
-                break;
+                if (sentBlock == pack.block) {
+                    sentBlock = null;
+                }
 
             case MINING_NETWORK_UPDATE:
-                miner.queueResetMiningOnBlockChainChange(pack.block, pack.intParam);
-                break;
-//            default:
-//                DUMMY:
-        }
+                blockChainClient = pack.sender;
+                lastKnownBlock = pack.block;
+                lastKnownNetworkComplexity = pack.intParam;
 
+                resetMining();
+        }
     }
 
     @Override
     public String toString() {
         return "MinerClient{" +
-                "transactions=" + transactions.size() +
-                ", miner=" + miner.toString() +
+                "unconfirmedTransactions=" + unconfirmedTransactions.size() +
                 '}';
     }
 }
